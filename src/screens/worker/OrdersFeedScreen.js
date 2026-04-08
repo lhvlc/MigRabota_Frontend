@@ -1,52 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, Switch, TouchableOpacity,
+import { View, Text, FlatList, TouchableOpacity, Switch,
   StyleSheet, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { getOrders, toggleHotStatus,
-  checkBackendConnection } from '../../src/services/api';
+import { getOrders, toggleHotStatus } from '../../services/api';
 
-export default function OrdersFeedPage() {
-  const router = useRouter();
-  const [orders, setOrders] = useState<any[]>([]);
+export default function OrdersFeedScreen({ route, navigation }) {
+  const user = route?.params?.user || {};
+  const [orders, setOrders] = useState([]);
   const [isHot, setIsHot] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [connected, setConnected] = useState(true);
 
-  useEffect(() => { init(); }, []);
+  useEffect(() => { load(); }, []);
 
-  const init = async () => {
-    const ok = await checkBackendConnection();
-    setConnected(ok);
-    if (ok) {
+  const load = async () => {
+    try {
       const data = await getOrders();
       setOrders(Array.isArray(data) ? data : []);
-    }
-    setLoading(false);
+    } catch (e) { setOrders([]); }
+    finally { setLoading(false); }
   };
 
-  const handleToggle = async (val: boolean) => {
+  const handleToggle = async (val) => {
     setIsHot(val);
     try {
-      await toggleHotStatus('guest_uid', val);
-    } catch { setIsHot(!val); }
+      await toggleHotStatus(user.uid || user.id, val);
+    } catch (e) { setIsHot(!val); }
   };
 
-  if (!connected) return (
-    <SafeAreaView style={S.safe}>
-      <View style={S.center}>
-        <Text style={S.errIcon}>📡</Text>
-        <Text style={S.errTxt}>Нет связи с сервером</Text>
-        <TouchableOpacity style={S.retryBtn} onPress={init}>
-          <Text style={S.retryTxt}>Повторить</Text>
-        </TouchableOpacity>
+  const renderCard = ({ item }) => (
+    <TouchableOpacity style={S.card}
+      onPress={() => navigation.navigate('OrderDetail', { order: item, user })}>
+      <View style={S.cardTop}>
+        <Text style={S.role}>{item.role}</Text>
+        <Text style={S.pay}>{item.pay} ₽</Text>
       </View>
-    </SafeAreaView>
+      <Text style={S.place}>{item.establishment}</Text>
+      <Text style={S.addr}>📍 {item.address}</Text>
+      <View style={S.applyRow}>
+        <Text style={S.applyBtn}>Смотреть →</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={S.safe}>
       <View style={S.container}>
-        <Text style={S.header}>Привет, Worker 👋</Text>
+        <Text style={S.header}>Привет, {user.name || 'Worker'} 👋</Text>
 
         <View style={[S.hotBox, isHot && S.hotBoxOn]}>
           <View style={{ flex: 1 }}>
@@ -54,7 +52,7 @@ export default function OrdersFeedPage() {
               {isHot ? '⚡ Я ГОТОВ РАБОТАТЬ' : 'Скрыт от работодателей'}
             </Text>
             <Text style={S.hotSub}>
-              {isHot ? 'Работодатели видят тебя' : 'Включи чтобы найти смену'}
+              {isHot ? 'Работодатели видят твой профиль' : 'Включи чтобы найти смену'}
             </Text>
           </View>
           <Switch value={isHot} onValueChange={handleToggle}
@@ -69,23 +67,8 @@ export default function OrdersFeedPage() {
         ) : orders.length === 0 ? (
           <Text style={S.empty}>Пока нет открытых смен</Text>
         ) : (
-          <FlatList
-            data={orders}
-            keyExtractor={(i: any) => i.id}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }: any) => (
-              <TouchableOpacity style={S.card}
-                onPress={() => router.push(`/order-detail/${item.id}`)}>
-                <View style={S.cardTop}>
-                  <Text style={S.role}>{item.role}</Text>
-                  <Text style={S.pay}>{item.pay} ₽</Text>
-                </View>
-                <Text style={S.place}>{item.establishment}</Text>
-                <Text style={S.addr}>📍 {item.address}</Text>
-                <Text style={S.more}>Смотреть →</Text>
-              </TouchableOpacity>
-            )}
-          />
+          <FlatList data={orders} keyExtractor={i => i.id}
+            renderItem={renderCard} showsVerticalScrollIndicator={false} />
         )}
       </View>
     </SafeAreaView>
@@ -95,7 +78,6 @@ export default function OrdersFeedPage() {
 const S = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0D1B2A' },
   container: { flex: 1, padding: 20 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { fontSize: 22, fontWeight: '700', color: '#E0E1DD', marginBottom: 16, marginTop: 8 },
   hotBox: { backgroundColor: '#1B263B', borderRadius: 16, padding: 18,
     flexDirection: 'row', alignItems: 'center', marginBottom: 24,
@@ -110,10 +92,7 @@ const S = StyleSheet.create({
   pay: { color: '#C9B47F', fontWeight: '800', fontSize: 20 },
   place: { color: '#E0E1DD', fontSize: 14, marginBottom: 4 },
   addr: { color: '#778DA9', fontSize: 13, marginBottom: 12 },
-  more: { color: '#C9B47F', fontWeight: '600', textAlign: 'right' },
+  applyRow: { alignItems: 'flex-end' },
+  applyBtn: { color: '#C9B47F', fontWeight: '600', fontSize: 14 },
   empty: { color: '#778DA9', textAlign: 'center', marginTop: 60, fontSize: 15 },
-  errIcon: { fontSize: 48, marginBottom: 16 },
-  errTxt: { color: '#E0E1DD', fontSize: 18, marginBottom: 20 },
-  retryBtn: { backgroundColor: '#C9B47F', padding: 14, borderRadius: 12, paddingHorizontal: 32 },
-  retryTxt: { color: '#0D1B2A', fontWeight: '700' },
 });
