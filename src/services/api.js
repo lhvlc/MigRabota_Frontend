@@ -1,6 +1,20 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const API_URL = 'https://asap-horeca-backend-k6q2.onrender.com';
 
-// Проверка соединения (её ищет index.tsx)
+// ── ХРАНЕНИЕ ПОЛЬЗОВАТЕЛЯ ────────────────────────────
+export const saveUser = async (user) => {
+  await AsyncStorage.setItem('user', JSON.stringify(user));
+};
+export const getStoredUser = async () => {
+  const raw = await AsyncStorage.getItem('user');
+  return raw ? JSON.parse(raw) : null;
+};
+export const clearUser = async () => {
+  await AsyncStorage.removeItem('user');
+};
+
+// ── ПОЛЬЗОВАТЕЛИ ─────────────────────────────────────
 export const checkBackendConnection = async () => {
   try {
     const res = await fetch(`${API_URL}/health`);
@@ -8,35 +22,54 @@ export const checkBackendConnection = async () => {
   } catch { return false; }
 };
 
-// Пользователи
-export const syncUser = async (uid, email, role, name) => {
+export const syncUser = async (uid, email, role, name, isLogin = false) => {
   const res = await fetch(`${API_URL}/users/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid, email, role, name })
+    body: JSON.stringify({ uid, email, role, name, isLogin }),
   });
   return res.json();
 };
 
-export const getMyProfile = async (uid) => {
-  const res = await fetch(`${API_URL}/users/me`, {
-    headers: { 'x-uid': uid }
+// Получить профиль соискателя по ID (для работодателя)
+export const getWorkerProfile = async (userId) => {
+  const res = await fetch(`${API_URL}/users/${userId}`);
+  return res.json();
+};
+
+// Обновить профиль соискателя
+export const updateProfile = async (userId, data) => {
+  const res = await fetch(`${API_URL}/users/${userId}/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
   });
   return res.json();
 };
 
-// Соискатель
+// Поставить рейтинг соискателю (от работодателя)
+export const rateWorker = async (userId, stars) => {
+  const res = await fetch(`${API_URL}/users/${userId}/rate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ stars }),
+  });
+  return res.json();
+};
+
+// ── СОИСКАТЕЛЬ ───────────────────────────────────────
 export const toggleHotStatus = async (uid, isHot) => {
   const res = await fetch(`${API_URL}/seeker/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uid, isHot })
+    body: JSON.stringify({ uid, isHot }),
   });
   return res.json();
 };
 
 export const getOrders = async () => {
   const res = await fetch(`${API_URL}/shifts`);
+  if (!res.ok) throw new Error('Ошибка загрузки');
   return res.json();
 };
 
@@ -44,17 +77,17 @@ export const applyToOrder = async (shiftId, seekerId) => {
   const res = await fetch(`${API_URL}/shifts/${shiftId}/apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seekerId })
+    body: JSON.stringify({ seekerId }),
   });
   return res.json();
 };
 
-// Работодатель
+// ── РАБОТОДАТЕЛЬ ─────────────────────────────────────
 export const createOrder = async (data) => {
   const res = await fetch(`${API_URL}/shifts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   });
   return res.json();
 };
@@ -67,7 +100,12 @@ export const getApplicants = async (shiftId) => {
 export const acceptApplicant = async (applicationId) => {
   const res = await fetch(`${API_URL}/applications/${applicationId}/accept`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
   });
+  return res.json();
+};
+
+export const getHotWorkers = async () => {
+  const res = await fetch(`${API_URL}/workers/hot`);
   return res.json();
 };

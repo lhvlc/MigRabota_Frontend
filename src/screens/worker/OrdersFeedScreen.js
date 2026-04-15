@@ -1,42 +1,112 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Switch,
-  StyleSheet, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
-import { getOrders, toggleHotStatus } from '../../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, FlatList, Switch, TouchableOpacity,
+  StyleSheet, ActivityIndicator, SafeAreaView,
+  RefreshControl, Platform,
+} from 'react-native';
+import { getOrders, toggleHotStatus, getStoredUser, clearUser } from '../../services/api';
 
 export default function OrdersFeedScreen({ route, navigation }) {
-  const user = route?.params?.user || {};
+  const [user, setUser] = useState(route?.params?.user || null);
   const [orders, setOrders] = useState([]);
   const [isHot, setIsHot] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const init = async () => {
+      if (!user) {
+        const stored = await getStoredUser();
+        if (!stored) {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'RoleSelection' }],
+          });
+        }
+        setUser(stored);
+      }
+      loadShifts();
+    };
+    init();
+  }, []);
 
-  const load = async () => {
+  // В OrdersFeedScreen.js замени loadShifts:
+  const loadShifts = async () => {
     try {
       const data = await getOrders();
-      setOrders(Array.isArray(data) ? data : []);
-    } catch (e) { setOrders([]); }
-    finally { setLoading(false); }
+      const userId = user?.id || user?.uid;
+
+    // Фильтруем: убираем смены со статусом COMPLETED
+      const filtered = Array.isArray(data)
+        ? data.filter(s => s.status === 'OPEN')
+        : [];
+
+      setOrders(filtered);
+    } catch (e) {
+      console.error('Ошибка загрузки смен:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadShifts();
+  }, []);
+
   const handleToggle = async (val) => {
+    if (toggling) return;
+    setToggling(true);
     setIsHot(val);
     try {
-      await toggleHotStatus(user.uid || user.id, val);
-    } catch (e) { setIsHot(!val); }
+      const uid = user?.uid || user?.id;
+      await toggleHotStatus(uid, val);
+    } catch {
+      setIsHot(!val);
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    // В вебе Alert не работает — используем window.confirm
+    if (Platform.OS === 'web') {
+      const ok = window.confirm('Выйти из аккаунта?');
+      if (ok) {
+        await clearUser();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'RoleSelection' }],
+        });
+      }
+    } else {
+      // На телефоне — выходим сразу
+      await clearUser();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'RoleSelection' }],
+      });
+    }
   };
 
   const renderCard = ({ item }) => (
-    <TouchableOpacity style={S.card}
+    <TouchableOpacity
+      style={S.card}
+      activeOpacity={0.85}
       onPress={() => navigation.navigate('OrderDetail', { order: item, user })}>
-      <View style={S.cardTop}>
-        <Text style={S.role}>{item.role}</Text>
-        <Text style={S.pay}>{item.pay} ₽</Text>
+      <View style={S.cardHeader}>
+        <View style={S.hotBadge}>
+          <Text style={S.hotBadgeTxt}>🔥 ГОРЯЩАЯ</Text>
+        </View>
+        <Text style={S.pay}>{item.pay?.toLocaleString()} ₽</Text>
       </View>
+      <Text style={S.role}>{item.role}</Text>
       <Text style={S.place}>{item.establishment}</Text>
-      <Text style={S.addr}>📍 {item.address}</Text>
-      <View style={S.applyRow}>
-        <Text style={S.applyBtn}>Смотреть →</Text>
+      <View style={S.cardFooter}>
+        <Text style={S.addr}>📍 {item.address}</Text>
+        <Text style={S.more}>Смотреть →</Text>
       </View>
     </TouchableOpacity>
   );
@@ -44,31 +114,86 @@ export default function OrdersFeedScreen({ route, navigation }) {
   return (
     <SafeAreaView style={S.safe}>
       <View style={S.container}>
-        <Text style={S.header}>Привет, {user.name || 'Worker'} 👋</Text>
 
-        <View style={[S.hotBox, isHot && S.hotBoxOn]}>
-          <View style={{ flex: 1 }}>
-            <Text style={S.hotTitle}>
-              {isHot ? '⚡ Я ГОТОВ РАБОТАТЬ' : 'Скрыт от работодателей'}
+        <View style={S.topBar}>
+          <View>
+            <Text style={S.greeting}>
+              Привет, {user?.name || 'Worker'} 👋
             </Text>
-            <Text style={S.hotSub}>
-              {isHot ? 'Работодатели видят твой профиль' : 'Включи чтобы найти смену'}
-            </Text>
+            <Text style={S.greetingSub}>Найди смену прямо сейчас</Text>
           </View>
-          <Switch value={isHot} onValueChange={handleToggle}
-            trackColor={{ false: '#0D1B2A', true: '#C9B47F' }}
-            thumbColor={isHot ? '#0D1B2A' : '#778DA9'} />
+        <View style={{flexDirection:'row', gap:8}}>
+          <TouchableOpacity
+            style={S.profileBtn}
+            onPress={() => navigation.navigate('WorkerProfile', { user })}>
+            <Text style={S.profileBtnTxt}>👤</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={S.logoutBtn}>
+            <Text style={S.logoutTxt}>Выйти</Text>
+          </TouchableOpacity>
+        </View>
         </View>
 
-        <Text style={S.section}>ГОРЯЩИЕ СМЕНЫ</Text>
+        <TouchableOpacity
+          style={[S.hotBox, isHot && S.hotBoxOn]}
+          onPress={() => handleToggle(!isHot)}
+          activeOpacity={0.9}>
+          <View style={S.hotLeft}>
+            <Text style={S.hotEmoji}>{isHot ? '⚡' : '😴'}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[S.hotTitle, isHot && S.hotTitleOn]}>
+                {isHot ? 'Я ГОТОВ РАБОТАТЬ' : 'Скрыт от работодателей'}
+              </Text>
+              <Text style={S.hotSub}>
+                {isHot
+                  ? 'Работодатели видят твой профиль'
+                  : 'Включи чтобы найти смену'}
+              </Text>
+            </View>
+          </View>
+          {toggling ? (
+            <ActivityIndicator color='#C9B47F' size='small' />
+          ) : (
+            <Switch
+              value={isHot}
+              onValueChange={handleToggle}
+              trackColor={{ false: '#0D1B2A', true: '#C9B47F' }}
+              thumbColor={isHot ? '#0D1B2A' : '#778DA9'}
+            />
+          )}
+        </TouchableOpacity>
+
+        <View style={S.sectionRow}>
+          <Text style={S.section}>ГОРЯЩИЕ СМЕНЫ</Text>
+          <Text style={S.count}>{orders.length} доступно</Text>
+        </View>
 
         {loading ? (
-          <ActivityIndicator color='#C9B47F' size='large' style={{ marginTop: 40 }} />
+          <View style={S.center}>
+            <ActivityIndicator color='#C9B47F' size='large' />
+            <Text style={S.loadTxt}>Загружаем смены...</Text>
+          </View>
         ) : orders.length === 0 ? (
-          <Text style={S.empty}>Пока нет открытых смен</Text>
+          <View style={S.center}>
+            <Text style={S.emptyIcon}>📭</Text>
+            <Text style={S.emptyTxt}>Пока нет открытых смен</Text>
+            <Text style={S.emptySub}>Потяни вниз чтобы обновить</Text>
+          </View>
         ) : (
-          <FlatList data={orders} keyExtractor={i => i.id}
-            renderItem={renderCard} showsVerticalScrollIndicator={false} />
+          <FlatList
+            data={orders}
+            keyExtractor={(i) => i.id}
+            renderItem={renderCard}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor='#C9B47F'
+              />
+            }
+          />
         )}
       </View>
     </SafeAreaView>
@@ -78,21 +203,62 @@ export default function OrdersFeedScreen({ route, navigation }) {
 const S = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0D1B2A' },
   container: { flex: 1, padding: 20 },
-  header: { fontSize: 22, fontWeight: '700', color: '#E0E1DD', marginBottom: 16, marginTop: 8 },
-  hotBox: { backgroundColor: '#1B263B', borderRadius: 16, padding: 18,
-    flexDirection: 'row', alignItems: 'center', marginBottom: 24,
-    borderWidth: 1.5, borderColor: '#1B263B' },
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', marginBottom: 20, marginTop: 8,
+  },
+  greeting: { fontSize: 22, fontWeight: '800', color: '#E0E1DD' },
+  greetingSub: { fontSize: 12, color: '#778DA9', marginTop: 2 },
+  logoutBtn: { padding: 8, marginTop: 4 },
+  logoutTxt: { color: '#778DA9', fontSize: 13 },
+  hotBox: {
+    backgroundColor: '#1B263B', borderRadius: 18, padding: 18,
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 24,
+    borderWidth: 1.5, borderColor: '#1B263B',
+  },
   hotBoxOn: { borderColor: '#C9B47F' },
-  hotTitle: { color: '#E0E1DD', fontWeight: '700', fontSize: 15, marginBottom: 4 },
-  hotSub: { color: '#778DA9', fontSize: 12 },
-  section: { color: '#778DA9', fontSize: 11, letterSpacing: 1.5, marginBottom: 12 },
-  card: { backgroundColor: '#1B263B', borderRadius: 16, padding: 18, marginBottom: 12 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  role: { color: '#E0E1DD', fontWeight: '700', fontSize: 18 },
-  pay: { color: '#C9B47F', fontWeight: '800', fontSize: 20 },
-  place: { color: '#E0E1DD', fontSize: 14, marginBottom: 4 },
-  addr: { color: '#778DA9', fontSize: 13, marginBottom: 12 },
-  applyRow: { alignItems: 'flex-end' },
-  applyBtn: { color: '#C9B47F', fontWeight: '600', fontSize: 14 },
-  empty: { color: '#778DA9', textAlign: 'center', marginTop: 60, fontSize: 15 },
+  hotLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  hotEmoji: { fontSize: 24 },
+  hotTitle: { color: '#778DA9', fontWeight: '700', fontSize: 14, marginBottom: 3 },
+  hotTitleOn: { color: '#C9B47F' },
+  hotSub: { color: '#778DA9', fontSize: 11 },
+  sectionRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 12,
+  },
+  section: { color: '#778DA9', fontSize: 11, letterSpacing: 1.5, fontWeight: '600' },
+  count: { color: '#C9B47F', fontSize: 12, fontWeight: '600' },
+  card: {
+    backgroundColor: '#1B263B', borderRadius: 18, padding: 18,
+    marginBottom: 12, borderWidth: 1, borderColor: '#263550',
+  },
+  cardHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 10,
+  },
+  hotBadge: {
+    backgroundColor: '#C9B47F22', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  hotBadgeTxt: { color: '#C9B47F', fontSize: 10, fontWeight: '700' },
+  pay: { color: '#C9B47F', fontWeight: '900', fontSize: 22 },
+  role: { color: '#E0E1DD', fontWeight: '800', fontSize: 20, marginBottom: 4 },
+  place: { color: '#E0E1DD', fontSize: 14, marginBottom: 10, opacity: 0.8 },
+  cardFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  },
+  addr: { color: '#778DA9', fontSize: 12 },
+  more: { color: '#C9B47F', fontWeight: '600', fontSize: 13 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+  loadTxt: { color: '#778DA9', marginTop: 12, fontSize: 14 },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
+  emptyTxt: { color: '#E0E1DD', fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  emptySub: { color: '#778DA9', fontSize: 13 },
+  profileBtn: {
+    width:36, height:36, borderRadius:18,
+    backgroundColor:'#1B263B', alignItems:'center',
+    justifyContent:'center', borderWidth:1, borderColor:'#C9B47F44'
+  },
+  profileBtnTxt: { fontSize:16 },
 });
