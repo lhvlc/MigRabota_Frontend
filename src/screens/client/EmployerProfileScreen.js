@@ -1,99 +1,86 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity,
-  StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet,
+  SafeAreaView, ScrollView, ActivityIndicator,
+  TextInput, Platform } from 'react-native';
 import { getOrders, clearUser } from '../../services/api';
-import { getHotWorkers } from '../../services/api';
+
+const API = 'https://asap-horeca-backend-k6q2.onrender.com';
 
 export default function EmployerProfileScreen({ route, navigation }) {
-  const user = route?.params?.user || {};
+  const [user, setUser] = useState(route?.params?.user || {});
   const [myShifts, setMyShifts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [completedCount, setCompletedCount] = useState(0);
 
-  const [hotWorkers, setHotWorkers] = useState([]);
+  const [form, setForm] = useState({
+    companyName: user.companyName || user.name || '',
+    responsibleName: user.responsibleName || '',
+    location: user.location || user.address || '',
+    yearsOnMarket: user.yearsOnMarket?.toString() || '0',
+  });
 
-  useEffect(() => {
-    loadMyShifts();
-  // Загрузить горячих соискателей
-    getHotWorkers().then(data => {
-      setHotWorkers(Array.isArray(data) ? data : []);
-    });
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-// В JSX добавь секцию под кнопкой "Создать смену":
-  {hotWorkers.length > 0 && (
-    <View>
-      <View style={{flexDirection:'row', justifyContent:'space-between', marginBottom:12}}>
-        <Text style={{color:'#778DA9', fontSize:11, letterSpacing:1.5, fontWeight:'600'}}>
-          ГОТОВЫ РАБОТАТЬ СЕЙЧАС
-        </Text>
-        <Text style={{color:'#C9B47F', fontSize:12, fontWeight:'600'}}>
-          {hotWorkers.length} чел.
-        </Text>
-      </View>
-      {hotWorkers.map(w => (
-        <TouchableOpacity key={w.id}
-          style={{backgroundColor:'#1B263B', borderRadius:14, padding:14,
-            marginBottom:8, flexDirection:'row', alignItems:'center',
-            borderWidth:1, borderColor:'#C9B47F33'}}
-          onPress={() => navigation.navigate('ViewWorkerProfile', {
-            workerId: w.id, workerName: w.name
-          })}>
-          <View style={{width:36, height:36, borderRadius:18,
-            backgroundColor:'#C9B47F22', alignItems:'center',
-            justifyContent:'center', marginRight:12}}>
-            <Text style={{color:'#C9B47F', fontWeight:'700'}}>
-              {(w.name||'?')[0].toUpperCase()}
-            </Text>
-          </View>
-          <View style={{flex:1}}>
-            <Text style={{color:'#E0E1DD', fontWeight:'700', fontSize:15}}>
-              ⚡ {w.name}
-            </Text>
-            <Text style={{color:'#778DA9', fontSize:12}}>
-              AI Score: {w.aiScore} · {w.address || 'Локация не указана'}
-            </Text>
-          </View>
-          <Text style={{color:'#C9B47F', fontSize:14}}>→</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  )}
-
-  useEffect(() => { loadMyShifts(); }, []);
-
-  const loadMyShifts = async () => {
+  const loadData = async () => {
     try {
       const all = await getOrders();
+      const userId = user.id || user.uid;
       const mine = Array.isArray(all)
-        ? all.filter(s => s.creatorId === (user.id || user.uid))
+        ? all.filter(s => s.creatorId === userId)
         : [];
       setMyShifts(mine);
+
+      // Посчитать завершённые смены
+      const res = await fetch(`${API}/shifts/completed/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCompletedCount(data.count || 0);
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/users/${user.id}/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.companyName,
+          companyName: form.companyName,
+          responsibleName: form.responsibleName,
+          location: form.location,
+          address: form.location,
+          yearsOnMarket: parseInt(form.yearsOnMarket) || 0,
+        })
+      });
+      const updated = await res.json();
+      setUser({ ...user, ...updated });
+      setEditing(false);
+      setSaveMsg('✅ Профиль сохранён!');
+      setTimeout(() => setSaveMsg(''), 3000);
     } catch (e) {
-      console.error('Ошибка загрузки смен:', e);
-    } finally { setLoading(false); }
+      setSaveMsg('❌ Ошибка сохранения');
+    } finally { setSaving(false); }
   };
 
   const handleLogout = async () => {
-    if (typeof window !== 'undefined') {
-      if (window.confirm('Выйти из аккаунта?')) {
-        await clearUser();
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'RoleSelection' }],
-        });
-      }
-    } else {
-      await clearUser();
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'RoleSelection' }],
-      });
-    }
+    if (Platform.OS === 'web' && !window.confirm('Выйти?')) return;
+    await clearUser();
+    navigation.reset({ index: 0, routes: [{ name: 'RoleSelection' }] });
   };
 
+  const score = user.employerRating || 0;
+  const scoreColor = score >= 4 ? '#C9B47F' : score >= 3 ? '#2ECC71' : '#778DA9';
+  const initials = (form.companyName || 'КО')
+    .split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
   const renderShift = ({ item }) => (
-    <TouchableOpacity
-      style={S.shiftCard}
+    <TouchableOpacity style={S.shiftCard}
       onPress={() => navigation.navigate('OrderWaiting', { shift: item, user })}>
       <View style={S.shiftTop}>
         <Text style={S.shiftRole}>{item.role}</Text>
@@ -104,52 +91,176 @@ export default function EmployerProfileScreen({ route, navigation }) {
         <View style={[S.statusDot,
           item.status === 'OPEN' ? S.statusOpen : S.statusClosed]}/>
         <Text style={S.statusTxt}>
-          {item.status === 'OPEN' ? 'Идёт поиск...' : 'Закрыта'}
+          {item.status === 'OPEN' ? 'Идёт поиск'
+            : item.status === 'COMPLETED' ? 'Завершена'
+            : item.status === 'CANCELLED' ? 'Отменена' : 'Закрыта'}
         </Text>
-        <Text style={S.viewTxt}>Смотреть кандидатов →</Text>
+        <Text style={S.viewTxt}>Кандидаты →</Text>
       </View>
     </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={S.safe}>
-      <View style={S.container}>
+      <ScrollView contentContainerStyle={S.container}>
 
-        <View style={S.header}>
-          <View>
-            <Text style={S.name}>{user.name || 'Заведение'}</Text>
-            <Text style={S.email}>{user.email || ''}</Text>
+        <View style={S.topBar}>
+          <View style={{flex:1}}>
+            <Text style={S.badge}>🏢 РАБОТОДАТЕЛЬ</Text>
           </View>
-          <TouchableOpacity onPress={handleLogout}>
-            <Text style={S.logoutTxt}>Выйти</Text>
-          </TouchableOpacity>
+          <View style={{flexDirection:'row', gap:12}}>
+            {!editing && (
+              <TouchableOpacity onPress={() => setEditing(true)}>
+                <Text style={S.editTxt}>✏️ Изменить</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={handleLogout}>
+              <Text style={S.logoutTxt}>Выйти</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={S.badge}>
-          <Text style={S.badgeTxt}>🏢 РАБОТОДАТЕЛЬ</Text>
+        {saveMsg ? (
+          <View style={[S.msgBox,
+            saveMsg.includes('✅') ? S.msgGreen : S.msgRed]}>
+            <Text style={S.msgTxt}>{saveMsg}</Text>
+          </View>
+        ) : null}
+
+        <View style={S.profileHeader}>
+          <View style={[S.avatar, {borderColor: scoreColor}]}>
+            <Text style={S.avatarTxt}>{initials}</Text>
+          </View>
+          <View style={S.scoreCard}>
+            <Text style={S.scoreLbl}>Рейтинг</Text>
+            <Text style={[S.scoreNum, {color: scoreColor}]}>
+              {score > 0 ? score.toFixed(1) : '—'}
+            </Text>
+            <Text style={S.scoreMax}>/5.0</Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          style={S.walletBtn}
-          onPress={() => navigation.navigate('Wallet', { user })}>
-          <Text style={S.walletBtnTxt}>
-            💳 Кошелёк
+        {editing ? (
+          <TextInput style={S.nameInput}
+            value={form.companyName}
+            onChangeText={v => setForm({...form, companyName: v})}
+            placeholder="Название заведения/компании"
+            placeholderTextColor="#778DA9"/>
+        ) : (
+          <Text style={S.companyName}>
+            {form.companyName || 'Название не указано'}
           </Text>
+        )}
+
+        <View style={S.statsRow}>
+          <View style={S.statBox}>
+            <Text style={S.statNum}>{completedCount}</Text>
+            <Text style={S.statLbl}>смен закрыто</Text>
+          </View>
+          <View style={S.statBox}>
+            <Text style={S.statNum}>{form.yearsOnMarket || 0}</Text>
+            <Text style={S.statLbl}>лет на рынке</Text>
+          </View>
+          <View style={S.statBox}>
+            <Text style={S.statNum}>{myShifts.length}</Text>
+            <Text style={S.statLbl}>смен создано</Text>
+          </View>
+        </View>
+
+        <Text style={S.sectionTitle}>Информация</Text>
+        <View style={S.infoCard}>
+
+          <View style={S.infoRow}>
+            <Text style={S.infoIcon}>👤</Text>
+            <View style={{flex:1}}>
+              <Text style={S.infoLbl}>Имя ответственного</Text>
+              {editing ? (
+                <TextInput style={S.infoInput}
+                  value={form.responsibleName}
+                  onChangeText={v => setForm({...form, responsibleName: v})}
+                  placeholder="Иван Иванов"
+                  placeholderTextColor="#778DA9"/>
+              ) : (
+                <Text style={S.infoVal}>
+                  {form.responsibleName || 'Не указано'}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={S.divider}/>
+          <View style={S.infoRow}>
+            <Text style={S.infoIcon}>📍</Text>
+            <View style={{flex:1}}>
+              <Text style={S.infoLbl}>Место дислокации</Text>
+              {editing ? (
+                <TextInput style={S.infoInput}
+                  value={form.location}
+                  onChangeText={v => setForm({...form, location: v})}
+                  placeholder="Москва, ЦАО"
+                  placeholderTextColor="#778DA9"/>
+              ) : (
+                <Text style={S.infoVal}>
+                  {form.location || 'Не указано'}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          <View style={S.divider}/>
+          <View style={S.infoRow}>
+            <Text style={S.infoIcon}>📅</Text>
+            <View style={{flex:1}}>
+              <Text style={S.infoLbl}>Лет на рынке</Text>
+              {editing ? (
+                <TextInput style={S.infoInput}
+                  value={form .yearsOnMarket}
+                  onChangeText={v => setForm({...form, yearsOnMarket: v})}
+                  placeholder="5"
+                  placeholderTextColor="#778DA9"
+                  keyboardType="numeric"/>
+              ) : (
+                <Text style={S.infoVal}>
+                  {form.yearsOnMarket || '0'} лет
+                </Text>
+              )}
+            </View>
+          </View>
+
+        </View>
+
+        {editing ? (
+          <View style={{flexDirection:'row', gap:10, marginBottom:16}}>
+            <TouchableOpacity style={[S.saveBtn, {flex:1}]}
+              onPress={handleSave} disabled={saving}>
+              {saving
+                ? <ActivityIndicator color="#0D1B2A"/>
+                : <Text style={S.saveBtnTxt}>💾 Сохранить</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={[S.cancelBtn, {flex:1}]}
+              onPress={() => setEditing(false)}>
+              <Text style={S.cancelBtnTxt}>Отмена</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        <TouchableOpacity style={S.walletBtn}
+          onPress={() => navigation.navigate('Wallet', { user })}>
+          <Text style={S.walletBtnTxt}>💳 Кошелёк</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={S.createBtn}
+        <TouchableOpacity style={S.createBtn}
           onPress={() => navigation.navigate('CreateOrder', { user })}>
           <Text style={S.createBtnTxt}>🔥 Создать новую смену</Text>
         </TouchableOpacity>
 
         <View style={S.sectionRow}>
-          <Text style={S.section}>МОИ СМЕНЫ</Text>
+          <Text style={S.sectionTitle}>МОИ СМЕНЫ</Text>
           <Text style={S.count}>{myShifts.length} смен</Text>
         </View>
 
         {loading ? (
-          <ActivityIndicator color='#C9B47F' size='large' style={{marginTop:40}}/>
+          <ActivityIndicator color='#C9B47F' size='large' style={{marginTop:20}}/>
         ) : myShifts.length === 0 ? (
           <View style={S.empty}>
             <Text style={S.emptyIcon}>📋</Text>
@@ -157,32 +268,79 @@ export default function EmployerProfileScreen({ route, navigation }) {
             <Text style={S.emptySub}>Создай первую смену!</Text>
           </View>
         ) : (
-          <FlatList data={myShifts} keyExtractor={i => i.id}
-            renderItem={renderShift} showsVerticalScrollIndicator={false}/>
+          <FlatList
+            data={myShifts}
+            keyExtractor={i => i.id}
+            renderItem={renderShift}
+            scrollEnabled={false}
+            showsVerticalScrollIndicator={false}/>
         )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const S = StyleSheet.create({
   safe: { flex:1, backgroundColor:'#0D1B2A' },
-  container: { flex:1, padding:20 },
-  header: { flexDirection:'row', justifyContent:'space-between',
-    alignItems:'flex-start', marginBottom:16, marginTop:8 },
-  name: { fontSize:22, fontWeight:'800', color:'#E0E1DD' },
-  email: { fontSize:12, color:'#778DA9', marginTop:2 },
-  logoutTxt: { color:'#778DA9', fontSize:13, paddingTop:4 },
-  badge: { backgroundColor:'#378ADD22', borderRadius:8,
-    paddingHorizontal:12, paddingVertical:5, alignSelf:'flex-start',
-    marginBottom:20, borderWidth:1, borderColor:'#378ADD33' },
-  badgeTxt: { color:'#378ADD', fontSize:11, fontWeight:'700', letterSpacing:1 },
+  container: { padding:20, paddingBottom:40 },
+  topBar: { flexDirection:'row', justifyContent:'space-between',
+    alignItems:'center', marginBottom:16, marginTop:8 },
+  badge: { color:'#378ADD', fontSize:12, fontWeight:'700', letterSpacing:1 },
+  editTxt: { color:'#C9B47F', fontSize:14 },
+  logoutTxt: { color:'#778DA9', fontSize:14 },
+  msgBox: { borderRadius:10, padding:12, marginBottom:14, borderWidth:1 },
+  msgGreen: { backgroundColor:'#1D9E7522', borderColor:'#1D9E7544' },
+  msgRed: { backgroundColor:'#E2444422', borderColor:'#E2444444' },
+  msgTxt: { color:'#E0E1DD', fontSize:13, textAlign:'center' },
+  profileHeader: { flexDirection:'row', alignItems:'center',
+    gap:16, marginBottom:16 },
+  avatar: { width:80, height:80, borderRadius:40, backgroundColor:'#1B263B',
+    alignItems:'center', justifyContent:'center', borderWidth:3 },
+  avatarTxt: { fontSize:28, fontWeight:'700', color:'#E0E1DD' },
+  scoreCard: { flex:1, backgroundColor:'#1B263B', borderRadius:16,
+    padding:14, alignItems:'center', borderWidth:1, borderColor:'#C9B47F33' },
+  scoreLbl: { color:'#778DA9', fontSize:12, marginBottom:4 },
+  scoreNum: { fontSize:36, fontWeight:'900' },
+  scoreMax: { color:'#778DA9', fontSize:13 },
+  nameInput: { fontSize:22, fontWeight:'700', color:'#E0E1DD',
+    backgroundColor:'#1B263B', borderRadius:12, padding:12,
+    marginBottom:16, textAlign:'center' },
+  companyName: { fontSize:24, fontWeight:'800', color:'#E0E1DD',
+    textAlign:'center', marginBottom:16 },
+  statsRow: { flexDirection:'row', gap:8, marginBottom:20 },
+  statBox: { flex:1, backgroundColor:'#1B263B', borderRadius:14,
+    padding:12, alignItems:'center', borderWidth:1, borderColor:'#263550' },
+  statNum: { fontSize:24, fontWeight:'900', color:'#C9B47F' },
+  statLbl: { fontSize:10, color:'#778DA9', marginTop:3, textAlign:'center' },
+  sectionTitle: { fontSize:11, color:'#778DA9', letterSpacing:1.5,
+    fontWeight:'600', marginBottom:12 },
+  infoCard: { backgroundColor:'#1B263B', borderRadius:16,
+    padding:16, marginBottom:16, borderWidth:1, borderColor:'#263550' },
+  infoRow: { flexDirection:'row', alignItems:'flex-start',
+    gap:12, paddingVertical:10 },
+  infoIcon: { fontSize:20 },
+  infoLbl: { color:'#778DA9', fontSize:12, marginBottom:4 },
+  infoVal: { color:'#E0E1DD', fontSize:15, fontWeight:'500' },
+  infoInput: { color:'#E0E1DD', fontSize:14, backgroundColor:'#0D1B2A',
+    borderRadius:8, padding:8, borderWidth:1, borderColor:'#263550' },
+  divider: { height:1, backgroundColor:'#263550' },
+  saveBtn: { backgroundColor:'#C9B47F', padding:16,
+    borderRadius:14, alignItems:'center' },
+  saveBtnTxt: { color:'#0D1B2A', fontWeight:'800', fontSize:15 },
+  cancelBtn: { backgroundColor:'#1B263B', padding:16,
+    borderRadius:14, alignItems:'center',
+    borderWidth:1, borderColor:'#263550' },
+  cancelBtnTxt: { color:'#778DA9', fontSize:15 },
+  walletBtn: { backgroundColor:'#1B263B', borderRadius:14,
+    padding:16, alignItems:'center', marginBottom:10,
+    borderWidth:1, borderColor:'#C9B47F44',
+    flexDirection:'row', justifyContent:'center', gap:8 },
+  walletBtnTxt: { color:'#C9B47F', fontWeight:'700', fontSize:15 },
   createBtn: { backgroundColor:'#C9B47F', padding:18,
-    borderRadius:16, alignItems:'center', marginBottom:24 },
+    borderRadius:16, alignItems:'center', marginBottom:20 },
   createBtnTxt: { color:'#0D1B2A', fontWeight:'800', fontSize:16 },
   sectionRow: { flexDirection:'row', justifyContent:'space-between',
     alignItems:'center', marginBottom:12 },
-  section: { color:'#778DA9', fontSize:11, letterSpacing:1.5, fontWeight:'600' },
   count: { color:'#C9B47F', fontSize:12, fontWeight:'600' },
   shiftCard: { backgroundColor:'#1B263B', borderRadius:16,
     padding:16, marginBottom:12, borderWidth:1, borderColor:'#263550' },
@@ -196,13 +354,8 @@ const S = StyleSheet.create({
   statusClosed: { backgroundColor:'#778DA9' },
   statusTxt: { color:'#778DA9', fontSize:12, flex:1 },
   viewTxt: { color:'#C9B47F', fontSize:12, fontWeight:'600' },
-  empty: { flex:1, alignItems:'center', justifyContent:'center', paddingTop:60 },
-  emptyIcon: { fontSize:48, marginBottom:16 },
-  emptyTxt: { color:'#E0E1DD', fontSize:18, fontWeight:'600', marginBottom:8 },
+  empty: { alignItems:'center', paddingTop:40 },
+  emptyIcon: { fontSize:40, marginBottom:12 },
+  emptyTxt: { color:'#E0E1DD', fontSize:18, fontWeight:'600', marginBottom:6 },
   emptySub: { color:'#778DA9', fontSize:13 },
-  walletBtn: { backgroundColor:'#1B263B', borderRadius:14,
-  padding:16, alignItems:'center', marginBottom:14,
-  borderWidth:1, borderColor:'#C9B47F44',
-  flexDirection:'row', justifyContent:'center', gap:8 },
-  walletBtnTxt: { color:'#C9B47F', fontWeight:'700', fontSize:15 },
 });

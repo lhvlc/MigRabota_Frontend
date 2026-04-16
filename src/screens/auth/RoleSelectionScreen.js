@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet,
   SafeAreaView, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { getStoredUser, syncUser, saveUser } from '../../services/api';
+import { Image } from 'react-native';
 
 export default function RoleSelectionScreen({ navigation }) {
   const [modal, setModal] = useState(null);
@@ -69,12 +70,18 @@ export default function RoleSelectionScreen({ navigation }) {
     <SafeAreaView style={S.safe}>
       <View style={S.container}>
         <View style={S.logoWrap}>
-          <View style={S.logoCircle}>
-            <Text style={S.logoIcon}>⚡</Text>
-          </View>
-          <Text style={S.logoMain}>ASAP</Text>
-          <Text style={S.logoSub}>WORK</Text>
-          <View style={S.divider}/>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={S.logoImage}
+            resizeMode="contain"
+          />
+          <Text style={S.logoMain}>
+            <Text style={S.logoRed}>М</Text>
+            <Text>иг</Text>
+            <Text style={S.logoRed}>Р</Text>
+            <Text>абота</Text>
+          </Text>
+            <View style={S.divider}/>
           <Text style={S.tagline}>Работа здесь и сейчас</Text>
         </View>
 
@@ -171,12 +178,19 @@ const S = StyleSheet.create({
   safe: { flex:1, backgroundColor:'#0D1B2A' },
   container: { flex:1, padding:24, justifyContent:'center' },
   logoWrap: { alignItems:'center', marginBottom:40 },
-  logoCircle: { width:64, height:64, borderRadius:32, backgroundColor:'#C9B47F22',
-    borderWidth:1.5, borderColor:'#C9B47F55', alignItems:'center',
-    justifyContent:'center', marginBottom:12 },
-  logoIcon: { fontSize:28 },
-  logoMain: { fontSize:44, fontWeight:'900', color:'#C9B47F', letterSpacing:8 },
-  logoSub: { fontSize:16, fontWeight:'300', color:'#E0E1DD', letterSpacing:10, marginTop:-4 },
+  logoImage: { width: 120, height: 120, marginBottom: 12 },
+  logoMain: { fontSize: 36,
+    fontWeight: '500',      // тонкий шрифт
+    fontStyle: 'italic',    // курсив
+    color: '#dddde1',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  logoRed: {
+    color: '#e72121',       // красный
+    fontWeight: '500',      // буквы М и Р чуть жирнее
+    fontStyle: 'italic',
+  },
   divider: { width:40, height:1.5, backgroundColor:'#C9B47F44', marginVertical:12 },
   tagline: { fontSize:13, color:'#778DA9', letterSpacing:1 },
   question: { fontSize:18, fontWeight:'600', color:'#E0E1DD',
