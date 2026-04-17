@@ -63,23 +63,24 @@ export default function OrderWaitingScreen({ route, navigation }) {
   };
 
   const handleAccept = async (item) => {
-    const ok = typeof window !== 'undefined'
-      ? window.confirm(`Принять ${item.seeker?.name}?`) : true;
-    if (!ok) return;
-    try { await acceptApplicant(item.id); await load(); }
-    catch (e) { console.error(e); }
+    try {
+      await acceptApplicant(item.id);
+      await load();
+    } catch (e) { 
+      console.error(e); 
+    }
   };
 
   const handleComplete = async (item) => {
-    const ok = typeof window !== 'undefined'
-      ? window.confirm(`Завершить смену для ${item.seeker?.name}?`) : true;
-    if (!ok) return;
     setCompleting(item.id);
     try {
       await completeShift(item.id);
       await load();
-    } catch (e) { console.error(e); }
-    finally { setCompleting(null); }
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setCompleting(null); 
+    }
   };
 
   const openRating = (item) => {
