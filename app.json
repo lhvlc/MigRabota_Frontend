@@ -8,6 +8,8 @@
     "newArchEnabled": true,
     "icon": "./assets/images/icon.png",
     "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
       "backgroundColor": "#0D1B2A"
     },
     "ios": {
@@ -17,8 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundImage": "./assets/images/android-icon-background.png"
       },
       "package": "com.asapwork.app"
     },
@@ -31,7 +32,6 @@
       "eas": {
         "projectId": "4744b9c6-2dfc-4cf2-92b4-6fff48f7a516"
       }
-    },
-    "owner": "lhvlc"
+    }
   }
 }
