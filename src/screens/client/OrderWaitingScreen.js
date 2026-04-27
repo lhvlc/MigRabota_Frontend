@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet,
+  SafeAreaView, ScrollView, ActivityIndicator,
+  TextInput, Image, Alert, Platform, Modal, FlatList } from 'react-native';
 
 const API = 'https://asap-horeca-backend-k6q2.onrender.com';
 
@@ -63,9 +64,9 @@ export default function OrderWaitingScreen({ route, navigation }) {
   };
 
   const handleAccept = async (item) => {
-    try {
-      await acceptApplicant(item.id);
-      await load();
+    try { 
+      await acceptApplicant(item.id); 
+      await load(); 
     } catch (e) { 
       console.error(e); 
     }
@@ -104,7 +105,22 @@ export default function OrderWaitingScreen({ route, navigation }) {
     navigation.navigate('ViewWorkerProfile', {
       workerId: item.seeker?.id,
       workerName: item.seeker?.name,
+      currentUser: user,
     });
+  };
+
+  const cancelShift = async () => {
+    try {
+      const res = await fetch(`${API}/shifts/${shift.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        Alert.alert('✅ Смена отменена', 'Средства возвращены на баланс');
+        navigation.navigate('EmployerProfile', { user });
+      }
+    } catch (e) { console.error(e); }
   };
 
   const renderApplicant = ({ item }) => {
@@ -120,7 +136,7 @@ export default function OrderWaitingScreen({ route, navigation }) {
           </TouchableOpacity>
           <Text style={S.email}>{item.seeker?.email}</Text>
           <View style={S.scoreRow}>
-            <Text style={S.scoreLbl}>AI Score: </Text>
+            <Text style={S.scoreLbl}>Рейтинг соискателя: </Text>
             <Text style={S.scoreVal}>{item.seeker?.aiScore ?? 0}</Text>
           </View>
           {item.status === 'COMPLETED' && isRated && (
@@ -148,7 +164,7 @@ export default function OrderWaitingScreen({ route, navigation }) {
                 : <Text style={S.completeTxt}>🏁 Завершить</Text>}
             </TouchableOpacity>
           )}
-          {item.status === 'COMPLETED' && !isRated && (
+          {item.status === 'COMPLETED' && !isRated && !item.rating && (
             <TouchableOpacity style={S.rateBtn} onPress={() => openRating(item)}>
               <Text style={S.rateTxt}>⭐ Оценить</Text>
             </TouchableOpacity>
@@ -183,6 +199,12 @@ export default function OrderWaitingScreen({ route, navigation }) {
           </View>
           <Text style={S.shiftPay}>{shift.pay?.toLocaleString()} ₽</Text>
         </View>
+
+        {shift.status === 'OPEN' && (
+          <TouchableOpacity style={S.cancelShiftBtn} onPress={cancelShift}>
+            <Text style={S.cancelShiftTxt}>❌ Отменить смену</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={S.sectionRow}>
           <Text style={S.section}>КАНДИДАТЫ</Text>
@@ -263,7 +285,11 @@ export default function OrderWaitingScreen({ route, navigation }) {
 }
 
 const S = StyleSheet.create({
-  safe: { flex:1, backgroundColor:'#0D1B2A' },
+  safe: { 
+    flex: 1, 
+    backgroundColor: '#0D1B2A',
+    paddingTop: Platform.OS === 'android' ? 35 : 0  // ← добавь это
+  },
   container: { flex:1, padding:20 },
   topBar: { flexDirection:'row', justifyContent:'space-between',
     alignItems:'center', marginBottom:16, marginTop:8 },
@@ -335,4 +361,8 @@ const S = StyleSheet.create({
   submitTxt: { color:'#0D1B2A', fontWeight:'800', fontSize:16 },
   cancelBtn: { alignItems:'center', padding:10 },
   cancelTxt: { color:'#778DA9', fontSize:14 },
+  cancelShiftBtn: { backgroundColor:'#E2444422', borderRadius:12,
+  padding:14, alignItems:'center', marginBottom:16,
+  borderWidth:1, borderColor:'#E2444444' },
+  cancelShiftTxt: { color:'#E24444', fontWeight:'700', fontSize:14 },
 });

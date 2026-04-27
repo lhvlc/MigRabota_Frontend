@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View, Text, FlatList, Switch, TouchableOpacity,
-  StyleSheet, ActivityIndicator, SafeAreaView,
-  RefreshControl, Platform,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, TextInput, Image, Alert, Platform, Switch, FlatList, RefreshControl } from 'react-native';
 import { getOrders, toggleHotStatus, getStoredUser, clearUser } from '../../services/api';
 
 export default function OrdersFeedScreen({ route, navigation }) {
@@ -31,13 +27,10 @@ export default function OrdersFeedScreen({ route, navigation }) {
     init();
   }, []);
 
-  // В OrdersFeedScreen.js замени loadShifts:
   const loadShifts = async () => {
     try {
       const data = await getOrders();
       const userId = user?.id || user?.uid;
-
-    // Фильтруем: убираем смены со статусом COMPLETED
       const filtered = Array.isArray(data)
         ? data.filter(s => s.status === 'OPEN')
         : [];
@@ -71,7 +64,6 @@ export default function OrdersFeedScreen({ route, navigation }) {
   };
 
   const handleLogout = async () => {
-    // В вебе Alert не работает — используем window.confirm
     if (Platform.OS === 'web') {
       const ok = window.confirm('Выйти из аккаунта?');
       if (ok) {
@@ -82,7 +74,6 @@ export default function OrdersFeedScreen({ route, navigation }) {
         });
       }
     } else {
-      // На телефоне — выходим сразу
       await clearUser();
       navigation.reset({
         index: 0,
@@ -201,7 +192,11 @@ export default function OrdersFeedScreen({ route, navigation }) {
 }
 
 const S = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0D1B2A' },
+  safe: { 
+    flex: 1, 
+    backgroundColor: '#0D1B2A',
+    paddingTop: Platform.OS === 'android' ? 35 : 0
+  },
   container: { flex: 1, padding: 20 },
   topBar: {
     flexDirection: 'row', justifyContent: 'space-between',

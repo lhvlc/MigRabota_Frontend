@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+// Добавь импорт Platform:
 import { View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, TextInput,
-  ActivityIndicator } from 'react-native';
+  SafeAreaView, ScrollView, ActivityIndicator,
+  TextInput, Image, Alert, Platform } from 'react-native';
 
 const API = 'https://asap-horeca-backend-k6q2.onrender.com';
 
@@ -187,7 +188,11 @@ export default function WalletScreen({ route, navigation }) {
 }
 
 const S = StyleSheet.create({
-  safe: { flex:1, backgroundColor:'#0D1B2A' },
+  safe: { 
+    flex: 1, 
+    backgroundColor: '#0D1B2A',
+    paddingTop: Platform.OS === 'android' ? 35 : 0  // ← добавь это
+  },
   container: { padding:20, paddingBottom:40 },
   topBar: { flexDirection:'row', justifyContent:'space-between',
     alignItems:'center', marginBottom:24, marginTop:8 },

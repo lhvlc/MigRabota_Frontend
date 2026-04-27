@@ -11,6 +11,10 @@ import CreateOrderScreen from './src/screens/client/CreateOrderScreen';
 import OrderWaitingScreen from './src/screens/client/OrderWaitingScreen';
 import ViewWorkerProfileScreen from './src/screens/client/ViewWorkerProfileScreen';
 import WalletScreen from './src/screens/WalletScreen';
+import EmployerPublicProfileScreen from './src/screens/worker/EmployerPublicProfileScreen';
+import ReviewsScreen from './src/screens/ReviewsScreen';
+import DocumentsScreen from './src/screens/DocumentsScreen';
+import ActiveShiftsScreen from './src/screens/ActiveShiftsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -33,6 +37,10 @@ export default function App() {
         <Stack.Screen name="OrderWaiting" component={OrderWaitingScreen}/>
         <Stack.Screen name="ViewWorkerProfile" component={ViewWorkerProfileScreen}/>
         <Stack.Screen name="Wallet" component={WalletScreen}/>
+        <Stack.Screen name="EmployerPublicProfile" component={EmployerPublicProfileScreen}/>
+        <Stack.Screen name="Reviews" component={ReviewsScreen}/>
+        <Stack.Screen name="Documents" component={DocumentsScreen}/>
+        <Stack.Screen name="ActiveShifts" component={ActiveShiftsScreen}/>
       </Stack.Navigator>
     </NavigationContainer>
   );
