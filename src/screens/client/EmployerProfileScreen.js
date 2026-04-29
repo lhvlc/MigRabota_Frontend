@@ -6,6 +6,32 @@ import { clearUser, saveUser } from '../../services/api';
  
 const API = 'https://asap-horeca-backend-k6q2.onrender.com';
  
+// ── Утилиты времени ──────────────────────────────────
+const formatTime = (dateStr) => {
+  if (!dateStr) return null;
+  return new Date(dateStr).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+};
+ 
+const formatDateShort = (dateStr) => {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return 'Сегодня';
+  if (d.toDateString() === tomorrow.toDateString()) return 'Завтра';
+  return d.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+ 
+const getDuration = (startTime, endTime) => {
+  if (!startTime || !endTime) return null;
+  const diff = (new Date(endTime) - new Date(startTime)) / 60000;
+  if (diff <= 0) return null;
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return m > 0 ? `${h}ч ${m}м` : `${h}ч`;
+};
+ 
 export default function EmployerProfileScreen({ route, navigation }) {
   const [user, setUser] = useState(route?.params?.user || {});
   const [myShifts, setMyShifts] = useState([]);
@@ -127,25 +153,56 @@ export default function EmployerProfileScreen({ route, navigation }) {
   const avgStars = myReviews.length
     ? (myReviews.reduce((s,r)=>s+r.stars,0)/myReviews.length).toFixed(1) : null;
  
-  const renderShift = ({ item }) => (
-    <TouchableOpacity style={S.shiftCard}
-      onPress={() => navigation.navigate('OrderWaiting', { shift: item, user })}>
-      <View style={S.shiftTop}>
-        <Text style={S.shiftRole}>{item.role}</Text>
-        <Text style={S.shiftPay}>{item.pay?.toLocaleString()} ₽</Text>
-      </View>
-      <Text style={S.shiftAddr}>📍 {item.address}</Text>
-      <View style={S.shiftFooter}>
-        <View style={[S.statusDot,
-          item.status==='OPEN'?S.statusOpen:item.status==='COMPLETED'?S.statusDone:S.statusClosed]}/>
-        <Text style={S.statusTxt}>
-          {item.status==='OPEN'?'Идёт поиск':item.status==='COMPLETED'?'Завершена':item.status==='CANCELLED'?'Отменена':'Закрыта'}
-        </Text>
-        <Text style={S.viewTxt}>Подробнее →</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderShift = ({ item }) => {
+    const startTime = formatTime(item.startTime);
+    const endTime = formatTime(item.endTime);
+    const dateLabel = formatDateShort(item.startTime);
+    const duration = getDuration(item.startTime, item.endTime);
 
+return (
+      <TouchableOpacity style={S.shiftCard}
+        onPress={() => navigation.navigate('OrderWaiting', { shift: item, user })}>
+        <View style={S.shiftTop}>
+          <Text style={S.shiftRole}>{item.role}</Text>
+          <Text style={S.shiftPay}>{item.pay?.toLocaleString()} ₽</Text>
+        </View>
+        <Text style={S.shiftAddr}>📍 {item.address}</Text>
+ 
+        {/* Время смены */}
+        {(dateLabel || startTime) && (
+          <View style={S.shiftTimeRow}>
+            {dateLabel && (
+              <View style={S.shiftTimeBadge}>
+                <Text style={S.shiftTimeTxt}>📅 {dateLabel}</Text>
+              </View>
+            )}
+            {startTime && (
+              <View style={S.shiftTimeBadge}>
+                <Text style={S.shiftTimeTxt}>
+                  🕐 {startTime}{endTime ? ` — ${endTime}` : ''}
+                </Text>
+              </View>
+            )}
+            {duration && (
+              <View style={S.shiftDurationBadge}>
+                <Text style={S.shiftDurationTxt}>⏱ {duration}</Text>
+              </View>
+            )}
+          </View>
+        )}
+ 
+        <View style={S.shiftFooter}>
+          <View style={[S.statusDot,
+            item.status==='OPEN'?S.statusOpen:item.status==='COMPLETED'?S.statusDone:S.statusClosed]}/>
+          <Text style={S.statusTxt}>
+            {item.status==='OPEN'?'Идёт поиск':item.status==='COMPLETED'?'Завершена':item.status==='CANCELLED'?'Отменена':'Закрыта'}
+          </Text>
+          <Text style={S.viewTxt}>Подробнее →</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+ 
   return (
     <SafeAreaView style={S.safe}>
       <ScrollView contentContainerStyle={S.container}>
@@ -163,7 +220,6 @@ export default function EmployerProfileScreen({ route, navigation }) {
         {saveMsg?<View style={[S.msgBox,saveMsg.includes('✅')?S.msgGreen:S.msgRed]}>
           <Text style={S.msgTxt}>{saveMsg}</Text></View>:null}
  
-        {/* Аватарка — кликабельная */}
         <View style={S.avatarWrap}>
           <TouchableOpacity onPress={handleAvatarPress} activeOpacity={0.8}>
             {photo?
@@ -196,7 +252,7 @@ export default function EmployerProfileScreen({ route, navigation }) {
               <Text style={S.statLbl}>лет на рынке</Text></View>
             <View style={S.statBox}><Text style={S.statNum}>{myShifts.length}</Text>
               <Text style={S.statLbl}>смен создано</Text></View>
-          </View>
+              </View>
         </View>
  
         <Text style={S.sectionTitle}>ИНФОРМАЦИЯ</Text>
@@ -240,7 +296,7 @@ export default function EmployerProfileScreen({ route, navigation }) {
               <Text style={S.infoVal}>{user.email||'Не указан'}</Text></View>
           </View>
         </View>
- 
+
         {editing?(
           <View style={{flexDirection:'row',gap:10,marginBottom:16}}>
             <TouchableOpacity style={[S.saveBtn,{flex:1}]} onPress={handleSave} disabled={saving}>
@@ -250,8 +306,8 @@ export default function EmployerProfileScreen({ route, navigation }) {
               <Text style={S.cancelBtnTxt}>Отмена</Text></TouchableOpacity>
           </View>
         ):null}
-        
-        {/* ═══ ОТЗЫВЫ ОБО МНЕ ═══ */}
+ 
+        {/* ОТЗЫВЫ ОБО МНЕ */}
         <View style={S.reviewsSection}>
           <View style={S.reviewsHeader}>
             <Text style={S.sectionTitle}>ОТЗЫВЫ ОБО МНЕ</Text>
@@ -326,16 +382,15 @@ export default function EmployerProfileScreen({ route, navigation }) {
               {shiftFilter==='ALL'&&<Text style={S.emptySub}>Создай первую смену!</Text>}
             </View>
           ):(
-            <FlatList 
-              data={filteredShifts ?? []} 
+            <FlatList
+              data={filteredShifts ?? []}
               keyExtractor={(item, index) => item?.id ? item.id.toString() : index.toString()}
-              renderItem={renderShift} 
-              scrollEnabled={false}
-            />
+              renderItem={renderShift}
+              scrollEnabled={false}/>
           )
         }
       </ScrollView>
- 
+
       <Modal visible={fullPhoto!==null} transparent animationType="fade"
         onRequestClose={()=>setFullPhoto(null)}>
         <TouchableOpacity style={S.photoModal} activeOpacity={1} onPress={()=>setFullPhoto(null)}>
@@ -389,8 +444,7 @@ const S = StyleSheet.create({
   reviewsSection:{marginBottom:16},
   reviewsHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',marginBottom:12},
   avgBadge:{backgroundColor:'#C9B47F22',borderRadius:12,paddingHorizontal:10,paddingVertical:4,borderWidth:1,borderColor:'#C9B47F44'},
-  avgBadgeTxt:{color:'#C9B47F',fontWeight:'700',fontSize:13},
-  reviewsEmpty:{backgroundColor:'#1B263B',borderRadius:14,padding:16,alignItems:'center',borderWidth:1,borderColor:'#263550'},
+  avgBadgeTxt:{color:'#C9B47F',fontWeight:'700',fontSize:13}, reviewsEmpty:{backgroundColor:'#1B263B',borderRadius:14,padding:16,alignItems:'center',borderWidth:1,borderColor:'#263550'},
   reviewsEmptyTxt:{color:'#E0E1DD',fontSize:14,fontWeight:'600',marginBottom:4},
   reviewsEmptySub:{color:'#778DA9',fontSize:12,textAlign:'center'},
   reviewCard:{backgroundColor:'#1B263B',borderRadius:14,padding:14,marginBottom:10,borderWidth:1,borderColor:'#263550'},
@@ -415,11 +469,17 @@ const S = StyleSheet.create({
   filterBtn:{paddingHorizontal:12,paddingVertical:6,borderRadius:20,backgroundColor:'#1B263B',borderWidth:1,borderColor:'#263550'},
   filterBtnOn:{borderColor:'#C9B47F',backgroundColor:'#C9B47F22'},
   filterTxt:{color:'#778DA9',fontSize:12},filterTxtOn:{color:'#C9B47F',fontWeight:'600'},
+  // Карточка смены
   shiftCard:{backgroundColor:'#1B263B',borderRadius:16,padding:16,marginBottom:12,borderWidth:1,borderColor:'#263550'},
   shiftTop:{flexDirection:'row',justifyContent:'space-between',marginBottom:6},
   shiftRole:{color:'#E0E1DD',fontWeight:'700',fontSize:17},
   shiftPay:{color:'#C9B47F',fontWeight:'900',fontSize:18},
-  shiftAddr:{color:'#778DA9',fontSize:12,marginBottom:10},
+  shiftAddr:{color:'#778DA9',fontSize:12,marginBottom:8},
+  shiftTimeRow:{flexDirection:'row',flexWrap:'wrap',gap:6,marginBottom:8},
+  shiftTimeBadge:{backgroundColor:'#0D1B2A',borderRadius:8,paddingHorizontal:8,paddingVertical:4,borderWidth:1,borderColor:'#263550'},
+  shiftTimeTxt:{color:'#E0E1DD',fontSize:11,fontWeight:'600'},
+  shiftDurationBadge:{backgroundColor:'#C9B47F15',borderRadius:8,paddingHorizontal:8,paddingVertical:4,borderWidth:1,borderColor:'#C9B47F33'},
+  shiftDurationTxt:{color:'#C9B47F',fontSize:11,fontWeight:'600'},
   shiftFooter:{flexDirection:'row',alignItems:'center',gap:6},
   statusDot:{width:8,height:8,borderRadius:4},
   statusOpen:{backgroundColor:'#C9B47F'},statusDone:{backgroundColor:'#1D9E75'},statusClosed:{backgroundColor:'#778DA9'},

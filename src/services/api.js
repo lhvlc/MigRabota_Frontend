@@ -2,14 +2,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = 'https://asap-horeca-backend-k6q2.onrender.com';
 
+// Безопасный fetch — не крашится если сервер вернул пустой ответ
+const safeFetch = async (url, options = {}) => {
+  try {
+    const res = await fetch(url, options);
+    const text = await res.text();
+    if (!text || text.trim() === '') {
+      console.warn('Empty response from:', url);
+      return { error: 'Сервер не ответил. Попробуй ещё раз.' };
+    }
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('JSON parse error from:', url, 'response:', text.slice(0, 200));
+      return { error: 'Ошибка ответа сервера' };
+    }
+  } catch (e) {
+    console.error('Network error:', url, e.message);
+    return { error: 'Нет соединения с сервером' };
+  }
+};
+
 // ── ХРАНЕНИЕ ПОЛЬЗОВАТЕЛЯ ────────────────────────────
 export const saveUser = async (user) => {
   await AsyncStorage.setItem('user', JSON.stringify(user));
 };
+
 export const getStoredUser = async () => {
   const raw = await AsyncStorage.getItem('user');
   return raw ? JSON.parse(raw) : null;
 };
+
 export const clearUser = async () => {
   await AsyncStorage.removeItem('user');
 };
@@ -23,48 +46,40 @@ export const checkBackendConnection = async () => {
 };
 
 export const syncUser = async (uid, email, role, name, isLogin = false) => {
-  const res = await fetch(`${API_URL}/users/sync`, {
+  return safeFetch(`${API_URL}/users/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uid, email, role, name, isLogin }),
   });
-  return res.json();
 };
 
-// Получить профиль соискателя по ID (для работодателя)
 export const getWorkerProfile = async (userId) => {
-  const res = await fetch(`${API_URL}/users/${userId}`);
-  return res.json();
+  return safeFetch(`${API_URL}/users/${userId}`);
 };
 
-// Обновить профиль соискателя
 export const updateProfile = async (userId, data) => {
-  const res = await fetch(`${API_URL}/users/${userId}/profile`, {
+  return safeFetch(`${API_URL}/users/${userId}/profile`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return res.json();
 };
 
-// Поставить рейтинг соискателю (от работодателя)
 export const rateWorker = async (userId, stars) => {
-  const res = await fetch(`${API_URL}/users/${userId}/rate`, {
+  return safeFetch(`${API_URL}/users/${userId}/rate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stars }),
   });
-  return res.json();
 };
 
 // ── СОИСКАТЕЛЬ ───────────────────────────────────────
 export const toggleHotStatus = async (uid, isHot) => {
-  const res = await fetch(`${API_URL}/seeker/status`, {
+  return safeFetch(`${API_URL}/seeker/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ uid, isHot }),
   });
-  return res.json();
 };
 
 export const getOrders = async () => {
@@ -74,38 +89,33 @@ export const getOrders = async () => {
 };
 
 export const applyToOrder = async (shiftId, seekerId) => {
-  const res = await fetch(`${API_URL}/shifts/${shiftId}/apply`, {
+  return safeFetch(`${API_URL}/shifts/${shiftId}/apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ seekerId }),
   });
-  return res.json();
 };
 
 // ── РАБОТОДАТЕЛЬ ─────────────────────────────────────
 export const createOrder = async (data) => {
-  const res = await fetch(`${API_URL}/shifts`, {
+  return safeFetch(`${API_URL}/shifts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
-  return res.json();
 };
 
 export const getApplicants = async (shiftId) => {
-  const res = await fetch(`${API_URL}/shifts/${shiftId}/applicants`);
-  return res.json();
+  return safeFetch(`${API_URL}/shifts/${shiftId}/applicants`);
 };
 
 export const acceptApplicant = async (applicationId) => {
-  const res = await fetch(`${API_URL}/applications/${applicationId}/accept`, {
+  return safeFetch(`${API_URL}/applications/${applicationId}/accept`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
-  return res.json();
 };
 
 export const getHotWorkers = async () => {
-  const res = await fetch(`${API_URL}/workers/hot`);
-  return res.json();
+  return safeFetch(`${API_URL}/workers/hot`);
 };
