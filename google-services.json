@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "336288540958",
+    "project_id": "migrabota-a5dba",
+    "storage_bucket": "migrabota-a5dba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:336288540958:android:14181be4f9abd8402f810f",
+        "android_client_info": {
+          "package_name": "com.asapwork.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQ0tXhMAiJm0BhbyC3fKdyrbMp3Vh1bxY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
