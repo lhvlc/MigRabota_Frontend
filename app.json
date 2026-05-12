@@ -29,7 +29,22 @@
       "bundler": "metro",
       "favicon": "./assets/images/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+    "@react-native-firebase/app",
+    "@react-native-firebase/auth",
+    [
+      "expo-build-properties",
+      {
+        "android": {
+          "googleServicesFile": "./google-services.json"
+        },
+        "ios": {
+          "googleServicesFile": "./GoogleService-Info.plist",
+          "useFrameworks": "static"
+        }
+      }
+    ]
+  ],
     "extra": {
       "eas": {
         "projectId": "4744b9c6-2dfc-4cf2-92b4-6fff48f7a516"

@@ -3,21 +3,15 @@ import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
   TextInput, ActivityIndicator, Image,
   KeyboardAvoidingView, ScrollView, Platform,
-  TouchableWithoutFeedback, Keyboard
+  Pressable, Keyboard
 } from 'react-native';
-import { FirebaseRecaptchaVerifierModal } from 'expo-firebase-recaptcha';
-import { PhoneAuthProvider, signInWithCredential } from 'firebase/auth';
-import { auth, firebaseConfig } from '../../config/firebaseConfig';
 import { getStoredUser, saveUser } from '../../services/api';
 
 const API = 'https://asap-horeca-backend-k6q2.onrender.com';
- 
-const STEP = {
-  ROLE: 'role',
-  PHONE: 'phone',
-  CODE: 'code',
-};
- 
+
+const STEP = { ROLE: 'role', FORM: 'form', CODE: 'code' };
+const TAB = { LOGIN: 'login', REGISTER: 'register' };
+
 const phoneSyncUser = async (phone, role, name) => {
   try {
     const res = await fetch(`${API}/users/phone-sync`, {
@@ -29,25 +23,23 @@ const phoneSyncUser = async (phone, role, name) => {
     if (!text || text.trim() === '') return { error: 'Сервер не ответил' };
     return JSON.parse(text);
   } catch (e) {
-    console.error('phoneSyncUser error:', e);
     return { error: 'Нет соединения с сервером' };
   }
 };
- 
+
 export default function RoleSelectionScreen({ navigation }) {
   const [step, setStep] = useState(STEP.ROLE);
   const [role, setRole] = useState(null);
+  const [tab, setTab] = useState(TAB.LOGIN);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
-  const [verificationId, setVerificationId] = useState(null);
+  const [confirmation, setConfirmation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
- 
-  const recaptchaVerifier = useRef(null);
   const codeInputRef = useRef(null);
- 
+
   useEffect(() => {
     getStoredUser().then(user => {
       if (!user) return;
@@ -55,29 +47,14 @@ export default function RoleSelectionScreen({ navigation }) {
       else navigation.replace('EmployerProfile', { user });
     });
   }, []);
- 
+
   useEffect(() => {
     if (resendTimer > 0) {
       const t = setTimeout(() => setResendTimer(r => r - 1), 1000);
       return () => clearTimeout(t);
     }
   }, [resendTimer]);
- 
-  const openPhone = (selectedRole) => {
-    setRole(selectedRole);
-    setStep(STEP.PHONE);
-    setName(''); setPhone(''); setCode(''); setError('');
-  };
- 
-  const goBack = () => {
-    if (step === STEP.CODE) {
-      setStep(STEP.PHONE); setCode(''); setError('');
-    } else {
-      setStep(STEP.ROLE); setRole(null); setError('');
-    }
-    Keyboard.dismiss();
-  };
- 
+
   const formatPhone = (raw) => {
     const digits = raw.replace(/\D/g, '');
     if (digits.startsWith('8') && digits.length >= 10) return '+7' + digits.slice(1);
@@ -85,71 +62,41 @@ export default function RoleSelectionScreen({ navigation }) {
     if (!raw.startsWith('+')) return '+7' + digits;
     return raw.replace(/[\s\-\(\)]/g, '');
   };
- 
+
+  const openForm = (selectedRole) => {
+    setRole(selectedRole);
+    setStep(STEP.FORM);
+    setTab(TAB.LOGIN);
+    setName(''); setPhone(''); setCode(''); setError('');
+  };
+
+  const goBack = () => {
+    if (step === STEP.CODE) {
+      setStep(STEP.FORM); setCode(''); setError('');
+    } else {
+      setStep(STEP.ROLE); setRole(null); setError('');
+    }
+    Keyboard.dismiss();
+  };
+
   const handleSendCode = async () => {
-    if (!name.trim()) { setError('Укажи имя'); return; }
     const digits = phone.replace(/\D/g, '');
     if (digits.length < 10) { setError('Введи корректный номер телефона'); return; }
- 
-    // На веб-версии — пропускаем Firebase, сразу синхронизируем
-    if (Platform.OS === 'web') {
-      setLoading(true); setError('');
-      try {
-        const roleStr = role === 'b2c' ? 'B2C' : 'B2B';
-        const formattedPhone = formatPhone(phone);
-        const user = await phoneSyncUser(formattedPhone, roleStr, name.trim());
-        if (user?.error) { setError(user.error); return; }
-        if (user?.id) {
-          const fullUser = { ...user, uid: user.id, phone: formattedPhone };
-          await saveUser(fullUser);
-          if (roleStr === 'B2C') navigation.replace('WorkerProfile', { user: fullUser });
-          else navigation.replace('EmployerProfile', { user: fullUser });
-        } else {
-          setError('Ошибка входа. Попробуй снова.');
-        }
-      } catch (e) {
-        setError('Нет соединения с сервером');
-      } finally { setLoading(false); }
-      return;
-    }
+    if (tab === TAB.REGISTER && !name.trim()) { setError('Укажи имя'); return; }
 
-
-setLoading(true); setError('');
-    try {
-      const formattedPhone = formatPhone(phone);
-      const provider = new PhoneAuthProvider(auth);
-      const vid = await provider.verifyPhoneNumber(
-        formattedPhone, recaptchaVerifier.current
-      );
-      setVerificationId(vid);
-      setStep(STEP.CODE);
-      setResendTimer(60);
-      setTimeout(() => codeInputRef.current?.focus(), 300);
-    } catch (e) {
-      console.error(e);
-      if (e.code === 'auth/invalid-phone-number')
-        setError('Неверный формат. Пример: +79001234567');
-      else if (e.code === 'auth/too-many-requests')
-        setError('Слишком много попыток. Подожди немного.');
-      else
-        setError('Не удалось отправить SMS. Проверь номер.');
-    } finally { setLoading(false); }
-  };
- 
-  const handleVerifyCode = async () => {
-    if (code.length !== 6) { setError('Введи 6-значный код из SMS'); return; }
- 
     setLoading(true); setError('');
-    try {
-      const credential = PhoneAuthProvider.credential(verificationId, code);
-      await signInWithCredential(auth, credential);
- 
+    const formattedPhone = formatPhone(phone);
+    const roleStr = role === 'b2c' ? 'B2C' : 'B2B';
+
+    // Веб — входим без SMS
+    if (Platform.OS === 'web') {
+      try {
+      const digits = phone.replace(/\D/g, '');
+      const formattedPhone = '+7' + (digits.startsWith('7') ? digits.slice(1) : digits.startsWith('8') ? digits.slice(1) : digits);
       const roleStr = role === 'b2c' ? 'B2C' : 'B2B';
-      const formattedPhone = formatPhone(phone);
-      const user = await phoneSyncUser(formattedPhone, roleStr, name.trim());
- 
-      if (user?.error) { setError(user.error); return; }
- 
+      const userName = tab === TAB.REGISTER ? name.trim() : 'Пользователь';
+      const user = await phoneSyncUser(formattedPhone, roleStr, userName);
+      if (user?.error) { setError(user.error); setLoading(false); return; }
       if (user?.id) {
         const fullUser = { ...user, uid: user.id, phone: formattedPhone };
         await saveUser(fullUser);
@@ -159,38 +106,70 @@ setLoading(true); setError('');
         setError('Ошибка входа. Попробуй снова.');
       }
     } catch (e) {
+      setError('Нет соединения с сервером');
       console.error(e);
+    } finally { setLoading(false); }
+    return;
+    }
+
+    // Мобильный — Firebase SMS
+    try {
+      const rnfbAuth = require('@react-native-firebase/auth').default;
+      const conf = await rnfbAuth().signInWithPhoneNumber(formattedPhone);
+      setConfirmation(conf);
+
+
+      setStep(STEP.CODE);
+        setResendTimer(60);
+        setTimeout(() => codeInputRef.current?.focus(), 300);
+      } catch (e) {
+        console.error('SMS error:', e);
+        if (e.code === 'auth/invalid-phone-number')
+          setError('Неверный формат. Пример: +79001234567');
+        else if (e.code === 'auth/too-many-requests')
+          setError('Слишком много попыток. Подожди немного.');
+        else
+          setError('Не удалось отправить SMS: ' + (e.message || e.code));
+      } finally { setLoading(false); }
+    };
+
+  const handleVerifyCode = async () => {
+    if (code.length !== 6) { setError('Введи 6-значный код из SMS'); return; }
+    setLoading(true); setError('');
+    try {
+      await confirmation.confirm(code);
+      const formattedPhone = formatPhone(phone);
+      const roleStr = role === 'b2c' ? 'B2C' : 'B2B';
+      const user = await phoneSyncUser(
+        formattedPhone, roleStr,
+        tab === TAB.REGISTER ? name.trim() : undefined
+      );
+      if (user?.error) { setError(user.error); return; }
+      if (user?.id) {
+        const fullUser = { ...user, uid: user.id, phone: formattedPhone };
+        await saveUser(fullUser);
+        if (roleStr === 'B2C') navigation.replace('WorkerProfile', { user: fullUser });
+        else navigation.replace('EmployerProfile', { user: fullUser });
+      } else {
+        setError('Ошибка входа. Попробуй снова.');
+      }
+    } catch (e) {
       if (e.code === 'auth/invalid-verification-code')
         setError('Неверный код. Проверь SMS.');
       else if (e.code === 'auth/code-expired')
         setError('Код истёк. Запроси новый.');
       else
-        setError('Ошибка подтверждения. Попробуй снова.');
+        setError('Ошибка: ' + (e.message || e.code));
     } finally { setLoading(false); }
   };
- 
-  const handleResend = () => {
-    if (resendTimer > 0) return;
-    setStep(STEP.PHONE);
-    setCode(''); setError('');
-  };
- 
+
   const isB2C = role === 'b2c';
- 
+  const accentColor = isB2C ? '#C9B47F' : '#378ADD';
+
   return (
     <SafeAreaView style={S.safe}>
- 
-      {/* Recaptcha — только для мобильных */}
-      {Platform.OS !== 'web' && (
-        <FirebaseRecaptchaVerifierModal
-          ref={recaptchaVerifier}
-          firebaseConfig={firebaseConfig}
-          attemptInvisibleVerification={true}
-        />
-      )}
 
-
-{/* ── Шаг 0: Выбор роли ── */}
+      {/* ── Шаг 0: Выбор роли ── */}
       {step === STEP.ROLE && (
         <View style={S.container}>
           <View style={S.logoWrap}>
@@ -206,67 +185,89 @@ setLoading(true); setError('');
             <View style={S.divider}/>
             <Text style={S.tagline}>Работа здесь и сейчас</Text>
           </View>
- 
+
           <Text style={S.question}>Выбери свою роль</Text>
- 
+
           <TouchableOpacity style={S.cardWorker}
-            onPress={() => openPhone('b2c')} activeOpacity={0.85}>
+            onPress={() => openForm('b2c')} activeOpacity={0.85}>
             <View style={S.cardIconWrap}>
               <Text style={S.cardIconTxt}>👤</Text>
             </View>
             <Text style={S.cardTitle}>Я ищу работу</Text>
             <Text style={S.cardArrow}>→</Text>
           </TouchableOpacity>
- 
+
           <TouchableOpacity style={S.cardClient}
-            onPress={() => openPhone('b2b')} activeOpacity={0.85}>
+            onPress={() => openForm('b2b')} activeOpacity={0.85}>
             <View style={S.cardIconWrap}>
               <Text style={S.cardIconTxt}>🏢</Text>
             </View>
             <Text style={S.cardTitle}>Найти персонал</Text>
             <Text style={S.cardArrow}>→</Text>
           </TouchableOpacity>
- 
+
           <Text style={S.footer}>
             Нажимая, ты соглашаешься с условиями{'\n'}
             <Text style={S.footerLink}>ОБРАБОТКИ ПЕРСОНАЛЬНЫХ ДАННЫХ</Text>
           </Text>
         </View>
       )}
- 
-      {/* ── Шаг 1: Ввод телефона ── */}
-      {step === STEP.PHONE && (
-          <KeyboardAvoidingView style={S.safe}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+
+      {/* ── Шаг 1: Форма входа/регистрации ── */}
+      {step === STEP.FORM && (
+        <KeyboardAvoidingView style={S.safe}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{flex:1}} onPress={Keyboard.dismiss}>
             <ScrollView contentContainerStyle={S.formContainer}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}>
- 
+
               <TouchableOpacity onPress={goBack} style={S.backBtn}>
                 <Text style={S.backTxt}>← Назад</Text>
               </TouchableOpacity>
- 
+
               <View style={S.formHeader}>
-                <Text style={S.formIcon}>{isB2C ? '👤' : '🏢'}</Text>
+                <Text
+
+
+style={S.formIcon}>{isB2C ? '👤' : '🏢'}</Text>
                 <Text style={S.formTitle}>{isB2C ? 'Соискатель' : 'Работодатель'}</Text>
-                <Text style={S.formSub}>
-                  {Platform.OS === 'web'
-                    ? 'Введи номер для входа'
-                    : 'Введи номер — пришлём код подтверждения'}
-                </Text>
               </View>
- 
+
+              {/* Вкладки */}
+              <View style={S.tabs}>
+                <TouchableOpacity
+                  style={[S.tab, tab === TAB.LOGIN && { ...S.tabActive, borderBottomColor: accentColor }]}
+                  onPress={() => { setTab(TAB.LOGIN); setError(''); }}>
+                  <Text style={[S.tabTxt, tab === TAB.LOGIN && { color: accentColor }]}>
+                    Войти
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[S.tab, tab === TAB.REGISTER && { ...S.tabActive, borderBottomColor: accentColor }]}
+                  onPress={() => { setTab(TAB.REGISTER); setError(''); }}>
+                  <Text style={[S.tabTxt, tab === TAB.REGISTER && { color: accentColor }]}>
+                    Зарегистрироваться
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
               {error ? (
                 <View style={S.errBox}><Text style={S.errTxt}>⚠️ {error}</Text></View>
               ) : null}
- 
-              <Text style={S.lbl}>{isB2C ? 'Твоё имя' : 'Название заведения'}</Text>
-              <TextInput style={S.inp}
-                placeholder={isB2C ? 'Иван Иванов' : 'Кафе «Уют»'}
-                placeholderTextColor='#778DA9'
-                value={name} onChangeText={setName}
-                autoCapitalize='words' returnKeyType="next"/>
- 
+
+              {/* Имя только при регистрации */}
+              {tab === TAB.REGISTER && (
+                <>
+                  <Text style={S.lbl}>{isB2C ? 'Твоё имя' : 'Название заведения'}</Text>
+                  <TextInput style={S.inp}
+                    placeholder={isB2C ? 'Иван Иванов' : 'Кафе «Уют»'}
+                    placeholderTextColor='#778DA9'
+                    value={name} onChangeText={setName}
+                    autoCapitalize='words'/>
+                </>
+              )}
+
               <Text style={S.lbl}>Номер телефона</Text>
               <View style={S.phoneWrap}>
                 <View style={S.phonePrefix}>
@@ -284,54 +285,59 @@ setLoading(true); setError('');
               </View>
               <Text style={S.phoneHint}>Пример: 9001234567 или +79001234567</Text>
 
-
-<TouchableOpacity
-                style={[S.submitBtn, isB2C ? S.submitB2C : S.submitB2B,
-                  loading && S.submitDisabled]}
+              <TouchableOpacity
+                style={[S.submitBtn, { backgroundColor: accentColor }, loading && S.submitDisabled]}
                 onPress={handleSendCode} disabled={loading}>
                 {loading
                   ? <ActivityIndicator color='#0D1B2A'/>
                   : <Text style={S.submitTxt}>
-                      {Platform.OS === 'web' ? '🚀 Войти' : '📲 Получить SMS код'}
+                      {Platform.OS === 'web'
+                        ? (tab === TAB.LOGIN ? '🚀 Войти' : '🚀 Зарегистрироваться')
+                        : '📲 Получить SMS код'}
                     </Text>}
               </TouchableOpacity>
- 
+
               <TouchableOpacity style={S.cancelBtn} onPress={goBack}>
                 <Text style={S.cancelTxt}>Отмена</Text>
               </TouchableOpacity>
               <View style={{ height: 40 }}/>
             </ScrollView>
-          </KeyboardAvoidingView>
+          </Pressable>
+        </KeyboardAvoidingView>
       )}
- 
-      {/* ── Шаг 2: Ввод SMS кода (только мобильные) ── */}
-      {step === STEP.CODE && Platform.OS !== 'web' && (
-          <KeyboardAvoidingView style={S.safe}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+
+      {/* ── Шаг 2: Ввод SMS кода ── */}
+      {step === STEP.CODE && (
+        <KeyboardAvoidingView style={S.safe}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{flex:1}} onPress={Keyboard.dismiss}>
             <ScrollView contentContainerStyle={S.formContainer}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}>
- 
+              keyboardShouldPersistTaps="handled">
+
               <TouchableOpacity onPress={goBack} style={S.backBtn}>
                 <Text style={S.backTxt}>← Назад</Text>
               </TouchableOpacity>
- 
+
               <View style={S.formHeader}>
                 <Text style={S.formIcon}>💬</Text>
                 <Text style={S.formTitle}>Код из SMS</Text>
                 <Text style={S.formSub}>
                   Отправили 6-значный код на{'\n'}
-                  <Text style={S.phoneHighlight}>{formatPhone(phone)}</Text>
+
+
+<Text style={{ color: accentColor, fontWeight: '700' }}>
+                    {formatPhone(phone)}
+                  </Text>
                 </Text>
               </View>
- 
+
               {error ? (
                 <View style={S.errBox}><Text style={S.errTxt}>⚠️ {error}</Text></View>
               ) : null}
- 
+
               <TextInput
                 ref={codeInputRef}
-                style={S.codeInput}
+                style={[S.codeInput, { borderColor: accentColor + '44' }]}
                 placeholder='- - - - - -'
                 placeholderTextColor='#778DA9'
                 keyboardType='number-pad'
@@ -343,15 +349,16 @@ setLoading(true); setError('');
                 }}
                 textAlign='center'
                 autoFocus/>
- 
+
               <View style={S.dotsRow}>
                 {[0,1,2,3,4,5].map(i => (
-                  <View key={i} style={[S.dot, i < code.length && S.dotFilled]}/>
+                  <View key={i} style={[S.dot,
+                    i < code.length && { backgroundColor: accentColor, borderColor: accentColor }]}/>
                 ))}
               </View>
- 
+
               <TouchableOpacity
-                style={[S.submitBtn, isB2C ? S.submitB2C : S.submitB2B,
+                style={[S.submitBtn, { backgroundColor: accentColor },
                   (loading || code.length < 6) && S.submitDisabled]}
                 onPress={handleVerifyCode}
                 disabled={loading || code.length < 6}>
@@ -359,29 +366,25 @@ setLoading(true); setError('');
                   ? <ActivityIndicator color='#0D1B2A'/>
                   : <Text style={S.submitTxt}>✅ Подтвердить</Text>}
               </TouchableOpacity>
- 
+
               <TouchableOpacity
-                style={[S.resendBtn, resendTimer > 0 && S.resendDisabled]}
-                onPress={handleResend} disabled={resendTimer > 0}>
-                <Text style={[S.resendTxt, resendTimer > 0 && S.resendTxtOff]}>
+                style={[S.cancelBtn, resendTimer > 0 && { opacity: 0.5 }]}
+                onPress={() => { if (resendTimer === 0) { setStep(STEP.FORM); setCode(''); } }}
+                disabled={resendTimer > 0}>
+                <Text style={S.cancelTxt}>
                   {resendTimer > 0
                     ? `Отправить снова через ${resendTimer} сек`
                     : '🔄 Отправить код снова'}
                 </Text>
               </TouchableOpacity>
- 
-              <TouchableOpacity style={S.cancelBtn} onPress={goBack}>
-                <Text style={S.cancelTxt}>Изменить номер</Text>
-              </TouchableOpacity>
               <View style={{ height: 40 }}/>
             </ScrollView>
-          </KeyboardAvoidingView>
+          </Pressable>
+        </KeyboardAvoidingView>
       )}
- 
     </SafeAreaView>
   );
 }
-
 
 const S = StyleSheet.create({
   safe: { flex:1, backgroundColor:'#0D1B2A' },
@@ -412,11 +415,19 @@ const S = StyleSheet.create({
   formContainer: { flexGrow:1, padding:24, paddingTop:60 },
   backBtn: { marginBottom:24 },
   backTxt: { color:'#778DA9', fontSize:14 },
-  formHeader: { alignItems:'center', marginBottom:32 },
+  formHeader: { alignItems:'center', marginBottom:24 },
   formIcon: { fontSize:48, marginBottom:12 },
-  formTitle: { fontSize:24, fontWeight:'800', color:'#E0E1DD', marginBottom:8 },
+  formTitle: { fontSize:24, fontWeight:'800', color:'#E0E1DD', marginBottom:4
+
+
+},
   formSub: { fontSize:14, color:'#778DA9', textAlign:'center', lineHeight:20 },
-  phoneHighlight: { color:'#C9B47F', fontWeight:'700' },
+  tabs: { flexDirection:'row', marginBottom:24,
+    borderBottomWidth:1, borderBottomColor:'#1B263B' },
+  tab: { flex:1, paddingVertical:12, alignItems:'center', borderBottomWidth:2,
+    borderBottomColor:'transparent' },
+  tabActive: { borderBottomWidth:2 },
+  tabTxt: { fontSize:15, fontWeight:'600', color:'#778DA9' },
   lbl: { fontSize:12, color:'#778DA9', marginBottom:8, letterSpacing:0.5 },
   phoneWrap: { flexDirection:'row', backgroundColor:'#1B263B',
     borderRadius:12, borderWidth:1, borderColor:'#263550',
@@ -428,12 +439,11 @@ const S = StyleSheet.create({
   phoneHint: { color:'#778DA9', fontSize:11, marginBottom:24 },
   codeInput: { backgroundColor:'#1B263B', color:'#C9B47F',
     borderRadius:16, padding:20, fontSize:36, fontWeight:'900',
-    letterSpacing:16, borderWidth:2, borderColor:'#C9B47F44',
+    letterSpacing:16, borderWidth:2,
     marginBottom:16, textAlign:'center' },
   dotsRow: { flexDirection:'row', justifyContent:'center', gap:10, marginBottom:28 },
   dot: { width:12, height:12, borderRadius:6,
     backgroundColor:'#263550', borderWidth:1, borderColor:'#778DA9' },
-  dotFilled: { backgroundColor:'#C9B47F', borderColor:'#C9B47F' },
   errBox: { backgroundColor:'#E2444422', borderRadius:8,
     padding:12, marginBottom:16, borderWidth:1, borderColor:'#E2444444' },
   errTxt: { color:'#E24444', fontSize:13 },
@@ -441,14 +451,8 @@ const S = StyleSheet.create({
     padding:16, borderRadius:12, fontSize:15,
     marginBottom:16, borderWidth:1, borderColor:'#263550' },
   submitBtn: { padding:18, borderRadius:14, alignItems:'center', marginBottom:12 },
-  submitB2C: { backgroundColor:'#C9B47F' },
-  submitB2B: { backgroundColor:'#378ADD' },
   submitDisabled: { opacity:0.5 },
   submitTxt: { color:'#0D1B2A', fontWeight:'800', fontSize:16 },
-  resendBtn: { alignItems:'center', padding:12, marginBottom:8 },
-  resendDisabled: { opacity:0.6 },
-  resendTxt: { color:'#C9B47F', fontSize:14, fontWeight:'600' },
-  resendTxtOff: { color:'#778DA9' },
-  cancelBtn: { alignItems:'center', padding:10 },
+  cancelBtn: { alignItems:'center', padding:12 },
   cancelTxt: { color:'#778DA9', fontSize:14 },
 });

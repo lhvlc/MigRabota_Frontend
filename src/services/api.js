@@ -29,8 +29,14 @@ export const saveUser = async (user) => {
 };
 
 export const getStoredUser = async () => {
-  const raw = await AsyncStorage.getItem('user');
-  return raw ? JSON.parse(raw) : null;
+  try {
+    const raw = await AsyncStorage.getItem('user');
+    if (!raw || raw === 'undefined' || raw === 'null') return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    await AsyncStorage.removeItem('user');
+    return null;
+  }
 };
 
 export const clearUser = async () => {

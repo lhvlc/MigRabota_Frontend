@@ -1,7 +1,6 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
 import RoleSelectionScreen from './src/screens/auth/RoleSelectionScreen';
 import WorkerProfileScreen from './src/screens/worker/WorkerProfileScreen';
 import OrdersFeedScreen from './src/screens/worker/OrdersFeedScreen';
